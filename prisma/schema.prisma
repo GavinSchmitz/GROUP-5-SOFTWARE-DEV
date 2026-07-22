@@ -1,0 +1,188 @@
+// HourBank - Community Skills-Swap Marketplace
+// To switch to PostgreSQL later: change provider to "postgresql" and update DATABASE_URL
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── NextAuth tables ───────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  bio           String?
+  location      String?
+  role          String    @default("USER") // USER | ADMIN
+  creditBalance Float     @default(3) // Starter credits
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts             Account[]
+  sessions             Session[]
+  userSkills           UserSkill[]
+  sentMessages         Message[]   @relation("SentMessages")
+  receivedMessages     Message[]   @relation("ReceivedMessages")
+  notifications        Notification[]
+  timeCredits          TimeCredit[]
+  requestedBookings    Booking[]   @relation("RequestedBookings")
+  providedBookings     Booking[]   @relation("ProvidedBookings")
+  reviewsGiven         Review[]    @relation("ReviewsGiven")
+  reviewsReceived      Review[]    @relation("ReviewsReceived")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Skills ────────────────────────────────────────────────────────
+
+model Skill {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  category    String
+  description String?
+  icon        String?
+
+  userSkills UserSkill[]
+  bookings   Booking[]
+}
+
+model UserSkill {
+  id          String  @id @default(cuid())
+  userId      String
+  skillId     String
+  proficiency String  @default("INTERMEDIATE") // BEGINNER | INTERMEDIATE | ADVANCED | EXPERT
+  isOffered   Boolean @default(true) // true = user offers this skill; false = user wants this
+  note        String?
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, skillId, isOffered])
+}
+
+// ─── Bookings ──────────────────────────────────────────────────────
+
+model Booking {
+  id              String   @id @default(cuid())
+  requesterId     String
+  providerId      String
+  skillId         String
+  status          String   @default("PENDING") // PENDING | ACCEPTED | IN_PROGRESS | COMPLETED | CANCELLED | DISPUTED
+  description     String?
+  scheduledAt     DateTime?
+  durationMinutes Int      @default(60)
+  location        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  requester User    @relation("RequestedBookings", fields: [requesterId], references: [id])
+  provider  User    @relation("ProvidedBookings", fields: [providerId], references: [id])
+  skill     Skill   @relation(fields: [skillId], references: [id])
+  reviews   Review[]
+  timeCredits TimeCredit[]
+}
+
+// ─── Reviews ───────────────────────────────────────────────────────
+
+model Review {
+  id         String   @id @default(cuid())
+  bookingId  String
+  authorId   String
+  revieweeId String
+  rating     Int      // 1-5
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  booking  Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  author   User    @relation("ReviewsGiven", fields: [authorId], references: [id])
+  reviewee User    @relation("ReviewsReceived", fields: [revieweeId], references: [id])
+
+  @@unique([bookingId, authorId])
+}
+
+// ─── Time Credits ──────────────────────────────────────────────────
+
+model TimeCredit {
+  id              String   @id @default(cuid())
+  userId          String
+  amount          Float    // positive = earned, negative = spent
+  type            String   // INITIAL | EARNED | SPENT | ADJUSTED
+  description     String?
+  relatedBookingId String?
+  createdAt       DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id])
+  booking Booking? @relation(fields: [relatedBookingId], references: [id])
+}
+
+// ─── Messaging ─────────────────────────────────────────────────────
+
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  content    String
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  sender   User @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
+}
+
+// ─── Notifications ─────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // BOOKING_REQUEST | BOOKING_ACCEPTED | BOOKING_DECLINED | BOOKING_COMPLETED | REVIEW_RECEIVED | MESSAGE_RECEIVED | CREDIT_EARNED
+  title     String
+  body      String?
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
