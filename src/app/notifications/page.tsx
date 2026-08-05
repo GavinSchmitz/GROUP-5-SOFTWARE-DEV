@@ -1,4 +1,6 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -10,11 +12,13 @@ import {
   MessageCircle,
   Coins,
   Clock,
+  Loader2,
 } from "lucide-react";
-import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { api } from "@/lib/api-client";
+import { RequireAuth } from "@/components/auth/require-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { MarkAsReadButton, MarkAllAsReadButton } from "./buttons";
+import type { NotificationsResponse, NotificationEntry } from "@/types/api";
 
 const typeIcons: Record<string, React.ElementType> = {
   BOOKING_REQUEST: CalendarCheck,
@@ -26,19 +30,56 @@ const typeIcons: Record<string, React.ElementType> = {
   CREDIT_EARNED: Coins,
 };
 
-export default async function NotificationsPage() {
-  const session = await auth();
+function NotificationsContent() {
+  const [notifications, setNotifications] = useState<NotificationEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (!session?.user?.id) {
-    redirect("/auth/signin");
-  }
+  const load = useCallback(async () => {
+    return api
+      .get<NotificationsResponse>("/notifications", { params: { limit: 50 } })
+      .then((res) => {
+        setNotifications(res.notifications);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+      });
+  }, []);
 
-  const notifications = await prisma.notification.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: "desc" },
-  });
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  async function markAsRead(id: number) {
+    try {
+      await api.patch("/notifications", { id });
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      );
+    } catch {
+      // ignore
+    }
+  }
+
+  async function markAllAsRead() {
+    try {
+      await api.patch("/notifications", { markAllRead: true });
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch {
+      // ignore
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center text-muted-foreground">
+        <Loader2 className="mr-2 size-5 animate-spin" />
+        <span>Loading…</span>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-8">
@@ -51,7 +92,10 @@ export default async function NotificationsPage() {
               : "All caught up!"}
           </p>
         </div>
-        {unreadCount > 0 && <MarkAllAsReadButton />}
+        <MarkAllAsReadButton
+          unreadCount={unreadCount}
+          onMarkAllRead={markAllAsRead}
+        />
       </div>
 
       {notifications.length === 0 ? (
@@ -107,13 +151,15 @@ export default async function NotificationsPage() {
                           <MarkAsReadButton
                             notificationId={notification.id}
                             isRead={notification.read}
+                            onMarkRead={markAsRead}
                           />
                         </div>
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground/60">
-                        {formatDistanceToNow(new Date(notification.createdAt), {
-                          addSuffix: true,
-                        })}
+                        {formatDistanceToNow(
+                          new Date(notification.createdAt),
+                          { addSuffix: true }
+                        )}
                       </p>
                     </div>
                   </div>
@@ -138,5 +184,13 @@ export default async function NotificationsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function NotificationsPage() {
+  return (
+    <RequireAuth>
+      <NotificationsContent />
+    </RequireAuth>
   );
 }

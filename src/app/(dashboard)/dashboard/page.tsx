@@ -1,4 +1,6 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Clock,
@@ -7,9 +9,9 @@ import {
   ArrowDownRight,
   Calendar,
   User,
+  Star,
+  Loader2,
 } from "lucide-react";
-import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
 import {
   Card,
   CardHeader,
@@ -20,6 +22,18 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { RequireAuth } from "@/components/auth/require-auth";
+import { useAuth } from "@/components/auth/use-auth";
+import { api } from "@/lib/api-client";
+import { ReviewDialog } from "./review-dialog";
+import type {
+  BookingsListResponse,
+  CreditsResponse,
+  NotificationsResponse,
+  BookingEntry,
+  BookingStatus,
+  CreditTransaction,
+} from "@/types/api";
 
 const statusStyles: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-800",
@@ -38,52 +52,102 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export default async function DashboardPage() {
-  const session = await auth();
+function getBookingActions(
+  booking: BookingEntry,
+  userId: number | undefined
+): BookingStatus[] {
+  if (!userId) return [];
+  const isProvider = booking.provider.id === userId;
+  const isRequester = booking.requester.id === userId;
+  if (!isProvider && !isRequester) return [];
+  const role = isProvider ? "provider" : "requester";
 
-  if (!session?.user?.id) {
-    redirect("/auth/signin");
+  const matrix: Record<string, Record<string, BookingStatus[]>> = {
+    PENDING: {
+      provider: ["ACCEPTED", "CANCELLED"],
+      requester: ["CANCELLED"],
+    },
+    ACCEPTED: {
+      provider: ["IN_PROGRESS", "CANCELLED"],
+      requester: ["IN_PROGRESS"],
+    },
+    IN_PROGRESS: {
+      provider: ["COMPLETED", "DISPUTED"],
+      requester: ["COMPLETED"],
+    },
+  };
+
+  return matrix[booking.status]?.[role] ?? [];
+}
+
+function DashboardContent() {
+  const { user } = useAuth();
+  const userId = user?.id;
+
+  const [bookings, setBookings] = useState<BookingEntry[]>([]);
+  const [credits, setCredits] = useState<CreditTransaction[]>([]);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [actingBooking, setActingBooking] = useState<number | null>(null);
+  const [reviewBooking, setReviewBooking] = useState<BookingEntry | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+
+  const load = useCallback(() => {
+    if (!userId) return Promise.resolve();
+    return Promise.all([
+      api.get<BookingsListResponse>("/bookings", { params: { limit: 100 } }),
+      api.get<CreditsResponse>("/credits"),
+      api.get<NotificationsResponse>("/notifications"),
+    ])
+      .then(([bookingsRes, creditsRes, notificationsRes]) => {
+        setBookings(bookingsRes.bookings);
+        setBalance(creditsRes.balance);
+        setCredits(creditsRes.transactions);
+        setUnreadCount(notificationsRes.unreadCount);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+      });
+  }, [userId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const activeBookings = bookings.filter((b) =>
+    ["PENDING", "ACCEPTED", "IN_PROGRESS"].includes(b.status)
+  );
+  const closedBookings = bookings.filter((b) =>
+    ["COMPLETED", "CANCELLED", "DISPUTED"].includes(b.status)
+  );
+
+  async function updateStatus(booking: BookingEntry, status: BookingStatus) {
+    setActingBooking(booking.id);
+    try {
+      await api.patch(`/bookings/${booking.id}`, { status });
+      await load();
+    } catch {
+      // ignore — keep list unchanged
+    } finally {
+      setActingBooking(null);
+    }
   }
 
-  const userId = session.user.id;
+  function openReview(booking: BookingEntry) {
+    setReviewBooking(booking);
+    setReviewOpen(true);
+  }
 
-  const [user, upcomingBookings, pendingRequests, recentCredits, unreadCount] =
-    await Promise.all([
-      prisma.user.findUniqueOrThrow({
-        where: { id: userId },
-        select: { name: true, creditBalance: true },
-      }),
-      prisma.booking.findMany({
-        where: {
-          OR: [{ requesterId: userId }, { providerId: userId }],
-          status: { in: ["ACCEPTED", "IN_PROGRESS"] },
-        },
-        include: {
-          skill: { select: { name: true } },
-          requester: { select: { id: true, name: true } },
-          provider: { select: { id: true, name: true } },
-        },
-        orderBy: { scheduledAt: "asc" },
-        take: 5,
-      }),
-      prisma.booking.findMany({
-        where: { providerId: userId, status: "PENDING" },
-        include: {
-          skill: { select: { name: true } },
-          requester: { select: { id: true, name: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-      }),
-      prisma.timeCredit.findMany({
-        where: { userId },
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      }),
-      prisma.notification.count({
-        where: { userId, read: false },
-      }),
-    ]);
+  if (loading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center text-muted-foreground">
+        <Loader2 className="mr-2 size-5 animate-spin" />
+        <span>Loading…</span>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
@@ -96,10 +160,10 @@ export default async function DashboardPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">
-                Welcome back, {user.name ?? "there"}
+                Welcome back, {user?.name ?? "there"}
               </p>
               <p className="text-3xl font-bold text-gray-900">
-                {user.creditBalance}{" "}
+                {balance ?? 0}{" "}
                 <span className="text-base font-medium text-muted-foreground">
                   credits
                 </span>
@@ -111,62 +175,75 @@ export default async function DashboardPage() {
 
       {/* Quick Actions */}
       <div className="mb-8 flex gap-3">
-        <Button render={<Link href="/skills" />} className="bg-amber-600 hover:bg-amber-700">
+        <Link
+          href="/skills"
+          className="inline-flex items-center justify-center rounded-lg text-sm font-medium whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 bg-amber-600 hover:bg-amber-700 text-white h-8 gap-1.5 px-2.5"
+        >
           <Plus className="h-4 w-4" />
           Find Skills
-        </Button>
-        <Button render={<Link href={`/profile/${userId}`} />} variant="outline">
-          <User className="h-4 w-4" />
-          View Profile
-        </Button>
+        </Link>
+        {userId && (
+          <Link
+            href={`/profile/${userId}`}
+            className="inline-flex items-center justify-center rounded-lg text-sm font-medium whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 border-border bg-background hover:bg-muted hover:text-foreground h-8 gap-1.5 px-2.5"
+          >
+            <User className="h-4 w-4" />
+            View Profile
+          </Link>
+        )}
         {unreadCount > 0 && (
-          <Button render={<Link href="/notifications" />} variant="ghost">
+          <Link
+            href="/notifications"
+            className="inline-flex items-center justify-center rounded-lg text-sm font-medium whitespace-nowrap transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 hover:bg-muted hover:text-foreground h-8 gap-1.5 px-2.5"
+          >
             {unreadCount} unread notification{unreadCount > 1 ? "s" : ""}
-          </Button>
+          </Link>
         )}
       </div>
 
-      {/* Upcoming Bookings */}
+      {/* Active Bookings */}
       <section className="mb-8">
         <h2 className="mb-4 text-xl font-semibold text-gray-900">
-          Upcoming Bookings
+          Active Bookings
         </h2>
-        {upcomingBookings.length === 0 ? (
+        {activeBookings.length === 0 ? (
           <Card>
             <CardContent>
               <p className="text-muted-foreground">
-                No upcoming bookings. Browse skills to get started.
+                No active bookings. Browse skills to get started.
               </p>
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-4">
-            {upcomingBookings.map((booking) => {
-              const otherParty =
-                booking.requesterId === userId
-                  ? booking.provider
-                  : booking.requester;
+            {activeBookings.map((booking) => {
+              const actions = getBookingActions(booking, userId);
+              const isProvider = booking.provider.id === userId;
+              const otherParty = isProvider
+                ? booking.requester
+                : booking.provider;
               return (
                 <Card key={booking.id}>
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div>
                         <CardTitle>{booking.skill.name}</CardTitle>
-                        <CardDescription className="mt-1 flex items-center gap-2">
+                        <CardDescription className="mt-1 flex flex-wrap items-center gap-2">
                           <User className="h-3 w-3" />
                           {otherParty.name ?? "Unknown"}
                           <span className="text-muted-foreground/60">|</span>
                           <Calendar className="h-3 w-3" />
                           {booking.scheduledAt
-                            ? new Date(
-                                booking.scheduledAt
-                              ).toLocaleDateString(undefined, {
-                                weekday: "short",
-                                month: "short",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
+                            ? new Date(booking.scheduledAt).toLocaleDateString(
+                                undefined,
+                                {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )
                             : "No date set"}
                           <span className="text-muted-foreground/60">|</span>
                           {booking.durationMinutes} min
@@ -175,6 +252,68 @@ export default async function DashboardPage() {
                       <StatusBadge status={booking.status} />
                     </div>
                   </CardHeader>
+                  {actions.length > 0 && (
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {actions.includes("ACCEPTED") && (
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700"
+                            disabled={actingBooking === booking.id}
+                            onClick={() => updateStatus(booking, "ACCEPTED")}
+                          >
+                            Accept
+                          </Button>
+                        )}
+                        {actions.includes("IN_PROGRESS") && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={actingBooking === booking.id}
+                            onClick={() => updateStatus(booking, "IN_PROGRESS")}
+                          >
+                            Start Session
+                          </Button>
+                        )}
+                        {actions.includes("COMPLETED") && (
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700"
+                            disabled={actingBooking === booking.id}
+                            onClick={() => updateStatus(booking, "COMPLETED")}
+                          >
+                            Complete
+                          </Button>
+                        )}
+                        {actions.includes("DISPUTED") && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={actingBooking === booking.id}
+                            onClick={() => updateStatus(booking, "DISPUTED")}
+                          >
+                            Dispute
+                          </Button>
+                        )}
+                        {actions.includes("CANCELLED") && (
+                          <Button
+                            size="sm"
+                            variant={
+                              isProvider && booking.status === "PENDING"
+                                ? "destructive"
+                                : "outline"
+                            }
+                            disabled={actingBooking === booking.id}
+                            onClick={() => updateStatus(booking, "CANCELLED")}
+                          >
+                            {isProvider && booking.status === "PENDING"
+                              ? "Decline"
+                              : "Cancel"}
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  )}
                 </Card>
               );
             })}
@@ -182,52 +321,56 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {/* Pending Requests */}
+      {/* Completed & Closed */}
       <section className="mb-8">
         <h2 className="mb-4 text-xl font-semibold text-gray-900">
-          Pending Requests
+          Completed &amp; Closed
         </h2>
-        {pendingRequests.length === 0 ? (
+        {closedBookings.length === 0 ? (
           <Card>
             <CardContent>
               <p className="text-muted-foreground">
-                No pending requests at the moment.
+                No completed or cancelled bookings yet.
               </p>
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-4">
-            {pendingRequests.map((booking) => (
-              <Card key={booking.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle>{booking.skill.name}</CardTitle>
-                      <CardDescription className="mt-1 flex items-center gap-2">
-                        <User className="h-3 w-3" />
-                        {booking.requester.name ?? "Unknown"}
-                        <span className="text-muted-foreground/60">|</span>
-                        {booking.durationMinutes} min
-                        <span className="text-muted-foreground/60">|</span>
-                        Requested{" "}
-                        {new Date(booking.createdAt).toLocaleDateString()}
-                      </CardDescription>
+            {closedBookings.map((booking) => {
+              const isProvider = booking.provider.id === userId;
+              const otherParty = isProvider
+                ? booking.requester
+                : booking.provider;
+              return (
+                <Card key={booking.id}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle>{booking.skill.name}</CardTitle>
+                        <CardDescription className="mt-1 flex flex-wrap items-center gap-2">
+                          <User className="h-3 w-3" />
+                          {otherParty.name ?? "Unknown"}
+                          <span className="text-muted-foreground/60">|</span>
+                          <Calendar className="h-3 w-3" />
+                          {booking.scheduledAt
+                            ? new Date(booking.scheduledAt).toLocaleDateString()
+                            : "No date set"}
+                        </CardDescription>
+                      </div>
+                      <StatusBadge status={booking.status} />
                     </div>
-                    <StatusBadge status={booking.status} />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex gap-2">
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700">
-                      Accept
-                    </Button>
-                    <Button size="sm" variant="destructive">
-                      Decline
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardHeader>
+                  {booking.status === "COMPLETED" && (
+                    <CardContent>
+                      <Button size="sm" variant="outline" onClick={() => openReview(booking)}>
+                        <Star className="size-3.5" />
+                        Leave a Review
+                      </Button>
+                    </CardContent>
+                  )}
+                </Card>
+              );
+            })}
           </div>
         )}
       </section>
@@ -239,13 +382,11 @@ export default async function DashboardPage() {
         </h2>
         <Card>
           <CardContent>
-            {recentCredits.length === 0 ? (
-              <p className="text-muted-foreground">
-                No recent activity yet.
-              </p>
+            {credits.length === 0 ? (
+              <p className="text-muted-foreground">No recent activity yet.</p>
             ) : (
               <div className="space-y-0">
-                {recentCredits.map((credit, index) => (
+                {credits.map((credit, index) => (
                   <div key={credit.id}>
                     <div className="flex items-center gap-3 py-3">
                       <div
@@ -280,7 +421,7 @@ export default async function DashboardPage() {
                         {credit.amount}
                       </span>
                     </div>
-                    {index < recentCredits.length - 1 && <Separator />}
+                    {index < credits.length - 1 && <Separator />}
                   </div>
                 ))}
               </div>
@@ -288,6 +429,24 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </section>
+
+      <ReviewDialog
+        booking={reviewBooking}
+        open={reviewOpen}
+        onOpenChange={(open) => {
+          setReviewOpen(open);
+          if (!open) setReviewBooking(null);
+        }}
+        onSubmitted={() => load()}
+      />
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <RequireAuth>
+      <DashboardContent />
+    </RequireAuth>
   );
 }

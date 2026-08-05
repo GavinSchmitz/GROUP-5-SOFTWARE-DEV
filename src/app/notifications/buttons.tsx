@@ -1,29 +1,23 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { CheckCheck, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function MarkAsReadButton({
   notificationId,
   isRead,
+  onMarkRead,
 }: {
-  notificationId: string;
+  notificationId: number;
   isRead: boolean;
+  onMarkRead: (id: number) => void;
 }) {
-  const router = useRouter();
-
   if (isRead) return null;
 
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: notificationId }),
-    });
-    router.refresh();
+    onMarkRead(notificationId);
   };
 
   return (
@@ -38,20 +32,17 @@ export function MarkAsReadButton({
   );
 }
 
-export function MarkAllAsReadButton() {
-  const router = useRouter();
-
-  const handleClick = async () => {
-    await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ markAllRead: true }),
-    });
-    router.refresh();
-  };
+export function MarkAllAsReadButton({
+  unreadCount,
+  onMarkAllRead,
+}: {
+  unreadCount: number;
+  onMarkAllRead: () => void;
+}) {
+  if (unreadCount === 0) return null;
 
   return (
-    <Button variant="outline" size="sm" onClick={handleClick}>
+    <Button variant="outline" size="sm" onClick={onMarkAllRead}>
       <CheckCheck className="h-4 w-4" />
       Mark All as Read
     </Button>

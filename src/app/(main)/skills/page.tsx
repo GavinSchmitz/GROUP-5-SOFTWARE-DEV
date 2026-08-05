@@ -1,5 +1,8 @@
+"use client";
+
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
 import {
   Card,
   CardHeader,
@@ -8,58 +11,37 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Search, Users } from "lucide-react";
+import { Search, Users, Loader2 } from "lucide-react";
+import { api } from "@/lib/api-client";
+import type { SkillsListResponse } from "@/types/api";
 
-interface SkillWithCount {
-  id: string;
-  name: string;
-  slug: string;
-  category: string;
-  description: string | null;
-  _count: { userSkills: number };
-}
+function SkillsPageInner() {
+  const searchParams = useSearchParams();
+  const q = searchParams.get("q") ?? "";
+  const category = searchParams.get("category") ?? "";
 
-interface SkillsPageProps {
-  searchParams: Promise<{ q?: string; category?: string }>;
-}
+  const [data, setData] = useState<SkillsListResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-export default async function SkillsPage({ searchParams }: SkillsPageProps) {
-  const { q, category } = await searchParams;
+  useEffect(() => {
+    api
+      .get<SkillsListResponse>("/skills", {
+        params: { q: q || undefined, category: category || undefined, page: 1, limit: 100 },
+      })
+      .then((response) => {
+        setError(null);
+        setData(response);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError("Failed to load skills. Please try again.");
+        setLoading(false);
+      });
+  }, [q, category]);
 
-  const where = {
-    ...(q
-      ? {
-          OR: [
-            { name: { contains: q } },
-            { description: { contains: q } },
-          ],
-        }
-      : {}),
-    ...(category ? { category } : {}),
-  };
-
-  const [skills, categories] = await Promise.all([
-    prisma.skill.findMany({
-      where,
-      orderBy: { name: "asc" },
-      include: {
-        _count: {
-          select: { userSkills: { where: { isOffered: true } } },
-        },
-      },
-    }),
-    prisma.skill.findMany({
-      distinct: ["category"],
-      select: { category: true },
-      orderBy: { category: "asc" },
-    }),
-  ]);
-
-  const allCategories: string[] = categories.map(
-    (c: { category: string }) => c.category,
-  );
-
-  const typedSkills = skills as unknown as SkillWithCount[];
+  const skills = data?.skills ?? [];
+  const allCategories = data?.categories ?? [];
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -70,7 +52,7 @@ export default async function SkillsPage({ searchParams }: SkillsPageProps) {
         </p>
       </div>
 
-      <form className="mb-6">
+      <form className="mb-6" action="/skills" method="GET">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -110,13 +92,20 @@ export default async function SkillsPage({ searchParams }: SkillsPageProps) {
         ))}
       </div>
 
-      {typedSkills.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-12 text-muted-foreground">
+          <Loader2 className="mr-2 size-4 animate-spin" />
+          Loading skills…
+        </div>
+      ) : error ? (
+        <p className="py-12 text-center text-destructive">{error}</p>
+      ) : skills.length === 0 ? (
         <p className="py-12 text-center text-muted-foreground">
           No skills found. Try a different search or category.
         </p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {typedSkills.map((skill) => (
+          {skills.map((skill) => (
             <Link key={skill.id} href={`/skills/${skill.slug}`}>
               <Card className="h-full transition-shadow hover:shadow-md">
                 <CardHeader>
@@ -141,5 +130,22 @@ export default async function SkillsPage({ searchParams }: SkillsPageProps) {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SkillsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container mx-auto px-4 py-8">
+          <div className="animate-pulse space-y-4">
+            <div className="h-8 w-48 rounded bg-muted" />
+            <div className="h-40 rounded-xl bg-muted" />
+          </div>
+        </div>
+      }
+    >
+      <SkillsPageInner />
+    </Suspense>
   );
 }

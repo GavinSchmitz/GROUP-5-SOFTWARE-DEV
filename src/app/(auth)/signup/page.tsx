@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -18,6 +19,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useAuth } from "@/components/auth/use-auth";
+import { parseApiError } from "@/lib/errors";
 
 const signUpSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -28,8 +31,9 @@ const signUpSchema = z.object({
 type SignUpValues = z.infer<typeof signUpSchema>;
 
 export default function SignUpPage() {
+  const router = useRouter();
+  const { signUp } = useAuth();
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const {
@@ -42,24 +46,18 @@ export default function SignUpPage() {
 
   async function onSubmit(data: SignUpValues) {
     setError(null);
-    setSuccess(false);
     setLoading(true);
 
-    const res = await fetch("/api/auth/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-
-    setLoading(false);
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Something went wrong. Please try again.");
-      return;
+    try {
+      await signUp(data);
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err) {
+      const parsed = parseApiError(err);
+      setError(parsed.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    setSuccess(true);
   }
 
   return (
@@ -73,86 +71,67 @@ export default function SignUpPage() {
           Join HourBank and start exchanging skills
         </CardDescription>
       </CardHeader>
-      {success ? (
+      <form onSubmit={handleSubmit(onSubmit)}>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm text-green-700">
-            <p className="font-medium">Account created successfully!</p>
-            <p className="mt-1">You&apos;ll receive 3 starter credits.</p>
-          </div>
-          <Link
-            href="/auth/signin"
-            className="inline-flex h-8 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80"
-          >
-            Go to sign in
-          </Link>
-        </CardContent>
-      ) : (
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <CardContent className="space-y-4">
-            {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                {error}
-              </div>
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="name">Name</Label>
+            <Input id="name" placeholder="Your name" {...register("name")} />
+            {errors.name && (
+              <p className="text-sm text-red-600">{errors.name.message}</p>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                placeholder="Your name"
-                {...register("name")}
-              />
-              {errors.name && (
-                <p className="text-sm text-red-600">{errors.name.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                {...register("email")}
-              />
-              {errors.email && (
-                <p className="text-sm text-red-600">{errors.email.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                {...register("password")}
-              />
-              {errors.password && (
-                <p className="text-sm text-red-600">{errors.password.message}</p>
-              )}
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Creating account…
-                </>
-              ) : (
-                "Create account"
-              )}
-            </Button>
-            <p className="text-center text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <Link
-                href="/auth/signin"
-                className="font-medium text-amber-600 hover:underline"
-              >
-                Sign in
-              </Link>
-            </p>
-          </CardFooter>
-        </form>
-      )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="you@example.com"
+              {...register("email")}
+            />
+            {errors.email && (
+              <p className="text-sm text-red-600">{errors.email.message}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              placeholder="••••••••"
+              {...register("password")}
+            />
+            {errors.password && (
+              <p className="text-sm text-red-600">{errors.password.message}</p>
+            )}
+          </div>
+        </CardContent>
+        <CardFooter className="flex flex-col gap-4">
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Creating account…
+              </>
+            ) : (
+              "Create account"
+            )}
+          </Button>
+          <p className="text-center text-sm text-muted-foreground">
+            Already have an account?{" "}
+            <Link
+              href="/signin"
+              className="font-medium text-amber-600 hover:underline"
+            >
+              Sign in
+            </Link>
+          </p>
+        </CardFooter>
+      </form>
     </Card>
   );
 }

@@ -16,6 +16,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Clock, Coins } from "lucide-react";
+import { api } from "@/lib/api-client";
+import { useAuth } from "@/components/auth/use-auth";
+import type {
+  BookingDetailResponse,
+  SkillDetailResponse,
+  UserProfile,
+} from "@/types/api";
 
 const DURATION_OPTIONS = [
   { value: 30, label: "30 minutes" },
@@ -37,14 +44,14 @@ const bookingSchema = z.object({
 type BookingFormValues = z.infer<typeof bookingSchema>;
 
 interface Skill {
-  id: string;
+  id: number;
   name: string;
   category: string;
   description: string | null;
 }
 
 interface Provider {
-  id: string;
+  id: number;
   name: string | null;
   image: string | null;
   location: string | null;
@@ -53,12 +60,12 @@ interface Provider {
 function NewBookingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   const skillId = searchParams.get("skillId");
   const providerId = searchParams.get("providerId");
 
   const [skill, setSkill] = useState<Skill | null>(null);
   const [provider, setProvider] = useState<Provider | null>(null);
-  const [balance, setBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,78 +81,73 @@ function NewBookingPageInner() {
 
   const durationMinutes = watch("durationMinutes");
   const creditCost = Math.ceil(durationMinutes / 60);
+  const balance = user?.creditBalance ?? null;
 
   useEffect(() => {
-    if (!skillId || !providerId) {
-      setLoading(false);
-      setError("Missing skill or provider information");
+    if (!providerId) {
+      Promise.resolve().then(() => {
+        setLoading(false);
+        setError("Missing provider information");
+      });
       return;
     }
 
-    async function loadData() {
-      try {
-        const [skillRes, providerRes, sessionRes] = await Promise.all([
-          fetch(`/api/skills/${skillId}`),
-          fetch(`/api/users/${providerId}`),
-          fetch("/api/auth/session"),
-        ]);
+    api
+      .get<UserProfile>(`/users/${providerId}`)
+      .then((providerRes) => {
+        setProvider(providerRes);
 
-        if (skillRes.ok) {
-          const data = await skillRes.json();
-          setSkill(data);
+        if (!skillId) {
+          const offered = providerRes.userSkills.find((us) => us.is_offered);
+          if (!offered) {
+            setError("This user does not offer any skills to book.");
+            setLoading(false);
+            return null;
+          }
+          setSkill({
+            id: offered.skill.id,
+            name: offered.skill.name,
+            category: offered.skill.category,
+            description: null,
+          });
+          setLoading(false);
+          return null;
         }
 
-        if (providerRes.ok) {
-          const data = await providerRes.json();
-          setProvider(data);
+        return api.get<SkillDetailResponse>(`/skills/${skillId}`);
+      })
+      .then((skillRes) => {
+        if (skillRes) {
+          setSkill(skillRes);
+          setLoading(false);
         }
-
-        if (sessionRes.ok) {
-          const data = await sessionRes.json();
-          setBalance(data.user?.creditBalance ?? null);
-        }
-      } catch {
+      })
+      .catch(() => {
         setError("Failed to load booking details");
-      } finally {
         setLoading(false);
-      }
-    }
-
-    loadData();
+      });
   }, [skillId, providerId]);
 
   const onSubmit = async (values: BookingFormValues) => {
-    if (!skillId || !providerId) return;
+    if (!providerId || !skill) return;
 
     setSubmitting(true);
     setError(null);
 
     try {
-      const res = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          skillId,
-          providerId,
-          durationMinutes: values.durationMinutes,
-          description: values.description || undefined,
-          scheduledAt: values.scheduledAt
-            ? new Date(values.scheduledAt).toISOString()
-            : undefined,
-          location: values.location || undefined,
-        }),
+      await api.post<BookingDetailResponse>("/bookings", {
+        skillId: skill.id,
+        providerId: Number(providerId),
+        durationMinutes: values.durationMinutes,
+        description: values.description || undefined,
+        scheduledAt: values.scheduledAt
+          ? new Date(values.scheduledAt).toISOString()
+          : undefined,
+        location: values.location || undefined,
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error ?? "Failed to create booking");
-        return;
-      }
-
-      router.push("/");
+      router.push("/dashboard");
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError("Failed to create booking. Please try again.");
     } finally {
       setSubmitting(false);
     }

@@ -7,63 +7,58 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
-interface UserBrief {
-  id: string;
-  name: string | null;
-  image: string | null;
-}
-
-interface Message {
-  id: string;
-  senderId: string;
-  receiverId: string;
-  content: string;
-  read: boolean;
-  createdAt: string;
-  sender: UserBrief;
-  receiver: UserBrief;
-}
-
-interface Conversation {
-  otherUser: UserBrief;
-  lastMessage: Message | null;
-  unreadCount: number;
-}
+import { RequireAuth } from "@/components/auth/require-auth";
+import { useAuth } from "@/components/auth/use-auth";
+import { api } from "@/lib/api-client";
+import type {
+  ConversationsResponse,
+  ConversationDetailResponse,
+  ConversationEntry,
+  MessageEntry,
+  UserBrief,
+} from "@/types/api";
 
 function MessagesPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { user } = useAuth();
   const activeUserId = searchParams.get("userId");
+  const activeUserIdNum = activeUserId ? Number(activeUserId) : null;
+  const isSelf =
+    activeUserIdNum !== null && user?.id !== undefined && activeUserIdNum === user.id;
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversations, setConversations] = useState<ConversationEntry[]>([]);
+  const [messages, setMessages] = useState<MessageEntry[]>([]);
+  const [activeUser, setActiveUser] = useState<UserBrief | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const fetchConversations = useCallback(async () => {
-    try {
-      const res = await fetch("/api/messages");
-      if (res.ok) {
-        setConversations(await res.json());
-      }
-    } finally {
-      setLoading(false);
-    }
+  const fetchConversations = useCallback(() => {
+    return api
+      .get<ConversationsResponse>("/messages")
+      .then((res) => {
+        setConversations(res.conversations);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+      });
   }, []);
 
-  const fetchMessages = useCallback(async (userId: string) => {
-    const res = await fetch(
-      `/api/messages/conversations?userId=${encodeURIComponent(userId)}`
-    );
-    if (res.ok) {
-      const data = await res.json();
-      setMessages(data.messages);
-      fetchConversations();
-    }
-  }, [fetchConversations]);
+  const fetchMessages = useCallback(
+    (userId: number) => {
+      return api
+        .get<ConversationDetailResponse>("/messages/conversations", { params: { userId } })
+        .then((res) => {
+          setActiveUser(res.user);
+          setMessages(res.messages);
+          return fetchConversations();
+        });
+    },
+    [fetchConversations]
+  );
 
   useEffect(() => {
     fetchConversations();
@@ -72,37 +67,33 @@ function MessagesPageInner() {
   }, [fetchConversations]);
 
   useEffect(() => {
-    if (!activeUserId) return;
-    fetchMessages(activeUserId);
-    const interval = setInterval(() => fetchMessages(activeUserId), 5000);
+    if (activeUserIdNum === null || isSelf) return;
+    fetchMessages(activeUserIdNum);
+    const interval = setInterval(() => fetchMessages(activeUserIdNum), 5000);
     return () => clearInterval(interval);
-  }, [activeUserId, fetchMessages]);
+  }, [activeUserIdNum, isSelf, fetchMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   async function handleSend() {
-    if (!input.trim() || !activeUserId || sending) return;
+    if (!input.trim() || activeUserIdNum === null || sending || isSelf) return;
     setSending(true);
     try {
-      const res = await fetch("/api/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ receiverId: activeUserId, content: input.trim() }),
+      const msg = await api.post<MessageEntry>("/messages", {
+        receiverId: activeUserIdNum,
+        content: input.trim(),
       });
-      if (res.ok) {
-        const msg: Message = await res.json();
-        setMessages((prev) => [...prev, msg]);
-        setInput("");
-        fetchConversations();
-      }
+      setMessages((prev) => [...prev, msg]);
+      setInput("");
+      fetchConversations();
     } finally {
       setSending(false);
     }
   }
 
-  function selectConversation(userId: string) {
+  function selectConversation(userId: number) {
     router.push(`/messages?userId=${userId}`);
   }
 
@@ -111,8 +102,11 @@ function MessagesPageInner() {
   }
 
   const activeConversation = conversations.find(
-    (c) => c.otherUser.id === activeUserId
+    (c) => c.otherUser.id === activeUserIdNum
   );
+
+  const headerName =
+    activeUser?.name ?? activeConversation?.otherUser.name ?? "Anonymous";
 
   return (
     <div className="container mx-auto flex h-[calc(100dvh-8rem)] max-w-5xl px-4 py-4">
@@ -146,7 +140,7 @@ function MessagesPageInner() {
                 key={convo.otherUser.id}
                 onClick={() => selectConversation(convo.otherUser.id)}
                 className={`flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors hover:bg-muted ${
-                  activeUserId === convo.otherUser.id ? "bg-muted" : ""
+                  activeUserIdNum === convo.otherUser.id ? "bg-muted" : ""
                 }`}
               >
                 <Avatar>
@@ -187,7 +181,7 @@ function MessagesPageInner() {
           activeUserId ? "block" : "hidden md:flex"
         }`}
       >
-        {activeUserId && activeConversation ? (
+        {activeUserIdNum !== null && activeUser ? (
           <>
             {/* Header */}
             <div className="flex items-center gap-3 border-b pb-3">
@@ -201,17 +195,14 @@ function MessagesPageInner() {
               </Button>
               <Avatar>
                 <AvatarImage
-                  src={activeConversation.otherUser.image ?? undefined}
+                  src={activeUser.image ?? undefined}
+                  alt={headerName}
                 />
                 <AvatarFallback>
-                  {activeConversation.otherUser.name
-                    ?.charAt(0)
-                    ?.toUpperCase() ?? "U"}
+                  {headerName.charAt(0)?.toUpperCase() ?? "U"}
                 </AvatarFallback>
               </Avatar>
-              <span className="font-medium">
-                {activeConversation.otherUser.name ?? "Anonymous"}
-              </span>
+              <span className="font-medium">{headerName}</span>
             </div>
 
             {/* Messages */}
@@ -220,12 +211,14 @@ function MessagesPageInner() {
                 <div
                   key={msg.id}
                   className={`mb-3 flex ${
-                    msg.senderId === activeUserId ? "justify-end" : "justify-start"
+                    msg.senderId === activeUserIdNum
+                      ? "justify-end"
+                      : "justify-start"
                   }`}
                 >
                   <div
                     className={`max-w-[70%] rounded-xl px-4 py-2 text-sm ${
-                      msg.senderId === activeUserId
+                      msg.senderId === activeUserIdNum
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted"
                     }`}
@@ -240,7 +233,11 @@ function MessagesPageInner() {
             {/* Input */}
             <div className="flex items-center gap-2 border-t pt-3">
               <Input
-                placeholder="Type a message..."
+                placeholder={
+                  isSelf
+                    ? "You can't message yourself"
+                    : "Type a message..."
+                }
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -249,12 +246,12 @@ function MessagesPageInner() {
                     handleSend();
                   }
                 }}
-                disabled={sending}
+                disabled={sending || isSelf}
               />
               <Button
                 size="icon"
                 onClick={handleSend}
-                disabled={!input.trim() || sending}
+                disabled={!input.trim() || sending || isSelf}
               >
                 <Send className="h-4 w-4" />
               </Button>
@@ -272,14 +269,18 @@ function MessagesPageInner() {
 
 export default function MessagesPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="container mx-auto flex h-[calc(100dvh-8rem)] max-w-5xl items-center justify-center px-4">
-          <div className="animate-pulse text-muted-foreground">Loading messages...</div>
-        </div>
-      }
-    >
-      <MessagesPageInner />
-    </Suspense>
+    <RequireAuth>
+      <Suspense
+        fallback={
+          <div className="container mx-auto flex h-[calc(100dvh-8rem)] max-w-5xl items-center justify-center px-4">
+            <div className="animate-pulse text-muted-foreground">
+              Loading messages...
+            </div>
+          </div>
+        }
+      >
+        <MessagesPageInner />
+      </Suspense>
+    </RequireAuth>
   );
 }

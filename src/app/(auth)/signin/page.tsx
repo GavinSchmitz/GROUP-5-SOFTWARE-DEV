@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,6 +19,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useAuth } from "@/components/auth/use-auth";
+import { parseApiError } from "@/lib/errors";
 
 const signInSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -30,6 +31,7 @@ type SignInValues = z.infer<typeof signInSchema>;
 
 export default function SignInPage() {
   const router = useRouter();
+  const { signIn } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -45,20 +47,16 @@ export default function SignInPage() {
     setError(null);
     setLoading(true);
 
-    const result = await signIn("credentials", {
-      email: data.email,
-      password: data.password,
-      redirect: false,
-    });
-
-    setLoading(false);
-
-    if (result?.error) {
-      setError("Invalid email or password. Please try again.");
-      return;
+    try {
+      await signIn(data.email, data.password);
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err) {
+      const parsed = parseApiError(err);
+      setError(parsed.message || "Invalid email or password. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    router.push("/dashboard");
   }
 
   return (
@@ -118,7 +116,7 @@ export default function SignInPage() {
           <p className="text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
             <Link
-              href="/auth/signup"
+              href="/signup"
               className="font-medium text-amber-600 hover:underline"
             >
               Sign up

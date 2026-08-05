@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -21,12 +22,39 @@ import {
   Bell,
   Shield,
 } from "lucide-react";
-import type { Session } from "next-auth";
+import { useAuth } from "@/components/auth/use-auth";
+import { api } from "@/lib/api-client";
+import type { NotificationsResponse } from "@/types/api";
 
 export function Navbar() {
-  const { data: session, status } = useSession();
-  const s = session as Session | null;
-  const u = s?.user as (Session["user"] & { role?: string; creditBalance?: number }) | undefined;
+  const { user, loading, signOut } = useAuth();
+  const router = useRouter();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const fetchUnread = () => {
+      api
+        .get<NotificationsResponse>("/notifications")
+        .then((res) => {
+          if (!cancelled) setUnreadCount(res.unreadCount);
+        })
+        .catch(() => {});
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user]);
+
+  async function handleSignOut() {
+    await signOut();
+    router.push("/");
+    router.refresh();
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-sm">
@@ -44,7 +72,7 @@ export function Navbar() {
           >
             Browse Skills
           </Link>
-          {session && (
+          {user && (
             <>
               <Link
                 href="/dashboard"
@@ -63,70 +91,103 @@ export function Navbar() {
         </nav>
 
         <div className="flex items-center gap-3">
-          {status === "loading" && (
+          {loading && (
             <div className="h-8 w-8 animate-pulse rounded-full bg-gray-200" />
           )}
 
-          {session && (
+          {user && (
             <Link
               href="/notifications"
               className="relative text-muted-foreground hover:text-foreground"
             >
               <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
             </Link>
           )}
 
-          {session ? (
+          {user ? (
             <div className="flex items-center gap-3">
               <Badge
                 variant="secondary"
                 className="hidden sm:flex gap-1 bg-amber-100 text-amber-800 hover:bg-amber-100"
               >
                 <Clock className="h-3 w-3" />
-                {u?.creditBalance ?? 0}{" "}
-                credits
+                {user.creditBalance ?? 0} credits
               </Badge>
 
               <DropdownMenu>
-                <DropdownMenuTrigger render={<Button variant="ghost" className="relative h-8 w-8 rounded-full" />}>
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={session.user?.image ?? ""} alt="" />
-                      <AvatarFallback>
-                        {session.user?.name?.charAt(0)?.toUpperCase() ?? "U"}
-                      </AvatarFallback>
-                    </Avatar>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      className="relative h-8 w-8 rounded-full"
+                    />
+                  }
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={user.image ?? ""} alt="" />
+                    <AvatarFallback>
+                      {user.name?.charAt(0)?.toUpperCase() ?? "U"}
+                    </AvatarFallback>
+                  </Avatar>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56" align="end">
                   <div className="flex items-center gap-2 p-2">
                     <div className="flex flex-col space-y-1 leading-none">
-                      <p className="font-medium">{session.user?.name}</p>
+                      <p className="font-medium">{user.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {session.user?.email}
+                        {user.email}
                       </p>
                     </div>
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem render={<Link href="/dashboard" className="flex items-center gap-2" />}>
-                      <LayoutDashboard className="h-4 w-4" />
-                      Dashboard
+                  <DropdownMenuItem
+                    render={
+                      <Link
+                        href="/dashboard"
+                        className="flex items-center gap-2"
+                      />
+                    }
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    Dashboard
                   </DropdownMenuItem>
-                  <DropdownMenuItem render={<Link href={`/profile/${session.user?.id}`} className="flex items-center gap-2" />}>
-                      <User className="h-4 w-4" />
-                      My Profile
+                  <DropdownMenuItem
+                    render={
+                      <Link
+                        href={`/profile/${user.id}`}
+                        className="flex items-center gap-2"
+                      />
+                    }
+                  >
+                    <User className="h-4 w-4" />
+                    My Profile
                   </DropdownMenuItem>
-                  <DropdownMenuItem render={<Link href="/messages" className="flex items-center gap-2" />}>
-                      <MessageSquare className="h-4 w-4" />
-                      Messages
+                  <DropdownMenuItem
+                    render={
+                      <Link href="/messages" className="flex items-center gap-2" />
+                    }
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    Messages
                   </DropdownMenuItem>
-                  {u?.role === "ADMIN" && (
-                    <DropdownMenuItem render={<Link href="/admin" className="flex items-center gap-2" />}>
-                        <Shield className="h-4 w-4" />
-                        Admin
+                  {user.role === "ADMIN" && (
+                    <DropdownMenuItem
+                      render={
+                        <Link href="/admin" className="flex items-center gap-2" />
+                      }
+                    >
+                      <Shield className="h-4 w-4" />
+                      Admin
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onClick={() => signOut({ callbackUrl: "/" })}
+                    onClick={handleSignOut}
                     className="flex items-center gap-2"
                   >
                     <LogOut className="h-4 w-4" />
@@ -136,10 +197,20 @@ export function Navbar() {
               </DropdownMenu>
             </div>
           ) : (
-            status !== "loading" && (
+            !loading && (
               <div className="flex items-center gap-2">
-                <Button variant="ghost" render={<Link href="/auth/signin" />}>Sign In</Button>
-                <Button render={<Link href="/auth/signup" />} className="bg-amber-600 hover:bg-amber-700">Sign Up</Button>
+                <Link
+                  href="/signin"
+                  className="inline-flex h-8 items-center justify-center rounded-lg px-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/signup"
+                  className="inline-flex h-8 items-center justify-center rounded-lg bg-amber-600 px-2.5 text-sm font-medium text-white hover:bg-amber-700 transition-colors"
+                >
+                  Sign Up
+                </Link>
               </div>
             )
           )}
