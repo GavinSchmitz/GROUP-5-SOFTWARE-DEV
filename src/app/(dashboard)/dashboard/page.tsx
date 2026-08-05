@@ -10,6 +10,7 @@ import {
   Calendar,
   User,
   Star,
+  MessageSquare,
   Loader2,
 } from "lucide-react";
 import {
@@ -225,7 +226,7 @@ function DashboardContent() {
               return (
                 <Card key={booking.id}>
                   <CardHeader>
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <CardTitle>{booking.skill.name}</CardTitle>
                         <CardDescription className="mt-1 flex flex-wrap items-center gap-2">
@@ -249,7 +250,17 @@ function DashboardContent() {
                           {booking.durationMinutes} min
                         </CardDescription>
                       </div>
-                      <StatusBadge status={booking.status} />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          render={<Link href={`/messages?userId=${otherParty.id}`} />}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <MessageSquare className="size-3.5" />
+                          Message
+                        </Button>
+                        <StatusBadge status={booking.status} />
+                      </div>
                     </div>
                   </CardHeader>
                   {actions.length > 0 && (
@@ -344,7 +355,7 @@ function DashboardContent() {
               return (
                 <Card key={booking.id}>
                   <CardHeader>
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <CardTitle>{booking.skill.name}</CardTitle>
                         <CardDescription className="mt-1 flex flex-wrap items-center gap-2">
@@ -357,7 +368,17 @@ function DashboardContent() {
                             : "No date set"}
                         </CardDescription>
                       </div>
-                      <StatusBadge status={booking.status} />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          render={<Link href={`/messages?userId=${otherParty.id}`} />}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <MessageSquare className="size-3.5" />
+                          Message
+                        </Button>
+                        <StatusBadge status={booking.status} />
+                      </div>
                     </div>
                   </CardHeader>
                   {booking.status === "COMPLETED" && (
