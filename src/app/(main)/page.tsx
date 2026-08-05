@@ -6,14 +6,16 @@ import {
   HandHeart,
   ArrowRight,
   GraduationCap,
-  Home,
   Monitor,
   Palette,
   Dumbbell,
-  Briefcase,
   Users,
   Star,
   Zap,
+  Wrench,
+  Music,
+  Heart,
+  Coffee,
 } from "lucide-react";
 import {
   Card,
@@ -53,9 +55,9 @@ const categories = [
     bg: "bg-blue-50",
   },
   {
-    icon: Home,
-    title: "Home & Garden",
-    description: "Handyman repairs, gardening, cleaning tips, and home improvement projects.",
+    icon: Wrench,
+    title: "DIY & Trades",
+    description: "Handyman repairs, carpentry, and practical home improvement projects.",
     color: "from-emerald-500 to-teal-600",
     bg: "bg-emerald-50",
   },
@@ -74,18 +76,32 @@ const categories = [
     bg: "bg-pink-50",
   },
   {
+    icon: Music,
+    title: "Music",
+    description: "Guitar, piano, vocals, and music production lessons.",
+    color: "from-amber-500 to-yellow-600",
+    bg: "bg-amber-50",
+  },
+  {
     icon: Dumbbell,
-    title: "Health & Fitness",
-    description: "Personal training, yoga coaching, nutrition advice, and wellness support.",
+    title: "Fitness",
+    description: "Personal training, workout coaching, and fitness guidance.",
     color: "from-orange-500 to-red-600",
     bg: "bg-orange-50",
   },
   {
-    icon: Briefcase,
-    title: "Professional",
-    description: "Career coaching, CV reviews, interview prep, and business mentoring.",
-    color: "from-cyan-500 to-blue-600",
-    bg: "bg-cyan-50",
+    icon: Heart,
+    title: "Wellness",
+    description: "Yoga, meditation, and mindfulness sessions.",
+    color: "from-teal-500 to-cyan-600",
+    bg: "bg-teal-50",
+  },
+  {
+    icon: Coffee,
+    title: "Lifestyle",
+    description: "Cooking classes and everyday life skills.",
+    color: "from-stone-500 to-amber-700",
+    bg: "bg-stone-50",
   },
 ];
 
@@ -250,34 +266,36 @@ export default function HomePage() {
           </div>
           <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {categories.map((category) => (
-              <Card
+              <Link
                 key={category.title}
-                className="group cursor-pointer overflow-hidden border-0 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl"
+                href={`/skills/category/${encodeURIComponent(category.title)}`}
               >
-                <div className="relative h-32 overflow-hidden bg-gradient-to-br from-gray-100 to-gray-50">
-                  <div
-                    className={`absolute inset-0 bg-gradient-to-br ${category.color} opacity-[0.08] transition-opacity duration-300 group-hover:opacity-[0.15]`}
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center">
+                <Card className="group h-full cursor-pointer overflow-hidden border-0 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl">
+                  <div className="relative h-32 overflow-hidden bg-gradient-to-br from-gray-100 to-gray-50">
                     <div
-                      className={`flex h-16 w-16 items-center justify-center rounded-2xl ${category.bg} text-gray-600 transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg`}
-                    >
-                      <category.icon className="h-8 w-8" />
+                      className={`absolute inset-0 bg-gradient-to-br ${category.color} opacity-[0.08] transition-opacity duration-300 group-hover:opacity-[0.15]`}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div
+                        className={`flex h-16 w-16 items-center justify-center rounded-2xl ${category.bg} text-gray-600 transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg`}
+                      >
+                        <category.icon className="h-8 w-8" />
+                      </div>
                     </div>
+                    {/* Decorative circles */}
+                    <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gray-100" />
+                    <div className="absolute -bottom-4 -left-4 h-16 w-16 rounded-full bg-gray-100" />
                   </div>
-                  {/* Decorative circles */}
-                  <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gray-100" />
-                  <div className="absolute -bottom-4 -left-4 h-16 w-16 rounded-full bg-gray-100" />
-                </div>
-                <CardHeader>
-                  <CardTitle className="text-lg">{category.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-base">
-                    {category.description}
-                  </CardDescription>
-                </CardContent>
-              </Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">{category.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CardDescription className="text-base">
+                      {category.description}
+                    </CardDescription>
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         </div>
