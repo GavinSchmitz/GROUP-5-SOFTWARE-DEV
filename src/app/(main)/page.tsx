@@ -122,7 +122,7 @@ export default function HomePage() {
           className="absolute inset-0 -z-20 bg-cover bg-center bg-no-repeat opacity-30"
           style={{
             backgroundImage:
-              "url('https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=1920&q=80')",
+              "url('https://live.staticflickr.com/4475/37336676174_04010f1e8d_b.jpg')",
           }}
         />
         {/* Gradient overlay */}
@@ -191,6 +191,14 @@ export default function HomePage() {
 
       {/* ─── How It Works ─── */}
       <section className="relative overflow-hidden bg-white px-4 py-24 sm:py-32">
+        {/* Background image */}
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-[0.08]"
+          style={{
+            backgroundImage:
+              "url('https://live.staticflickr.com/1912/45262367872_b0ec56f741_b.jpg')",
+          }}
+        />
         {/* Subtle pattern */}
         <div
           className="absolute inset-0 opacity-[0.03]"
@@ -343,6 +351,14 @@ export default function HomePage() {
 
       {/* ─── Testimonial-style Section ─── */}
       <section className="relative bg-white px-4 py-24 sm:py-32">
+        {/* Background image */}
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-[0.07]"
+          style={{
+            backgroundImage:
+              "url('https://live.staticflickr.com/3484/3962134615_a716811892_b.jpg')",
+          }}
+        />
         <div className="container mx-auto max-w-4xl text-center">
           <div className="relative rounded-3xl bg-gray-50 p-12 sm:p-16">
             {/* Decorative quote marks */}
@@ -376,7 +392,7 @@ export default function HomePage() {
               className="absolute inset-0 bg-cover bg-center opacity-20"
               style={{
                 backgroundImage:
-                  "url('https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=1920&q=80')",
+                  "url('https://live.staticflickr.com/3882/14635357121_060a0ab53a_b.jpg')",
               }}
             />
             <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-900/95 to-amber-900/30" />
