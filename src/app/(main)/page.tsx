@@ -16,6 +16,7 @@ import {
   Music,
   Heart,
   Coffee,
+  Megaphone,
 } from "lucide-react";
 import {
   Card,
@@ -102,6 +103,14 @@ const categories = [
     description: "Cooking classes and everyday life skills.",
     color: "from-stone-500 to-amber-700",
     bg: "bg-stone-50",
+  },
+  {
+    icon: Megaphone,
+    title: "Communication & Leadership",
+    description:
+      "Public speaking, mentoring, teamwork, and leadership skills that transfer to any career.",
+    color: "from-fuchsia-500 to-purple-600",
+    bg: "bg-fuchsia-50",
   },
 ];
 

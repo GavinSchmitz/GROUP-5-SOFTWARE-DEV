@@ -3,6 +3,7 @@ import {
   Dumbbell,
   GraduationCap,
   Heart,
+  Megaphone,
   Monitor,
   Music,
   Palette,
@@ -102,6 +103,15 @@ export const categoryStyles: Record<string, CategoryStyle> = {
     border: "border-stone-200",
     chip: "bg-stone-600 hover:bg-stone-700",
     shadow: "hover:shadow-stone-200/60",
+  },
+  "Communication & Leadership": {
+    icon: Megaphone,
+    gradient: "from-fuchsia-500 to-purple-600",
+    bg: "bg-fuchsia-50",
+    text: "text-fuchsia-700",
+    border: "border-fuchsia-200",
+    chip: "bg-fuchsia-600 hover:bg-fuchsia-700",
+    shadow: "hover:shadow-fuchsia-200/60",
   },
 };
 
