@@ -53,7 +53,6 @@ export function Navbar() {
   async function handleSignOut() {
     await signOut();
     router.push("/");
-    router.refresh();
   }
 
   return (
