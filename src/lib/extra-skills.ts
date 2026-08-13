@@ -2,7 +2,7 @@ import type { SkillDetailResponse, SkillEntry } from "@/types/api";
 
 export const EXTRA_CATEGORY = "Communication & Leadership";
 
-export const hiddenSkillSlugs = new Set(["public-speaking"]);
+export const hiddenSkillSlugs: Set<string> = new Set();
 
 export const extraSkills: SkillEntry[] = [
   {
