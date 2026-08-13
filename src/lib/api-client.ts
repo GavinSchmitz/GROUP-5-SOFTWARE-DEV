@@ -64,7 +64,9 @@ export async function apiFetch<T>(
 
     if (response.status === 401 && !isAuthEndpoint(path)) {
       clearAuth();
-      if (typeof window !== "undefined") {
+      // Only bounce to signin when an authenticated session went stale.
+      // Guests (no token) should be able to browse public pages freely.
+      if (typeof window !== "undefined" && token) {
         window.location.href = "/signin";
       }
     }
