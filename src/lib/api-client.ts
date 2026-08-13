@@ -24,7 +24,7 @@ function buildUrl(path: string, params?: QueryParams): string {
 }
 
 function isAuthEndpoint(path: string): boolean {
-  return path.startsWith("/auth/");
+  return path.startsWith("/auth/") || path.startsWith("/skills");
 }
 
 export async function apiFetch<T>(
