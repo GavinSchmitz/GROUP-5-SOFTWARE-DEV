@@ -16,7 +16,7 @@ import type { SkillsListResponse } from "@/types/api";
 
 export default function CategoryPage() {
   const params = useParams<{ category: string }>();
-  const category = params.category;
+  const category = decodeURIComponent(params.category);
 
   const [data, setData] = useState<SkillsListResponse | null>(null);
   const [loading, setLoading] = useState(true);
