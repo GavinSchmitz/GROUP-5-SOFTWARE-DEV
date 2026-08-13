@@ -12,6 +12,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Users, Loader2 } from "lucide-react";
 import { api } from "@/lib/api-client";
+import {
+  filterExtraSkills,
+  hideHiddenSkills,
+} from "@/lib/extra-skills";
 import type { SkillsListResponse } from "@/types/api";
 
 export default function CategoryPage() {
@@ -38,7 +42,10 @@ export default function CategoryPage() {
       });
   }, [category]);
 
-  const skills = data?.skills ?? [];
+  const skills = hideHiddenSkills([
+    ...(data?.skills ?? []),
+    ...filterExtraSkills({ category }),
+  ]);
   const count = skills.length;
 
   return (

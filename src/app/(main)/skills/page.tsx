@@ -14,6 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Search, Users, Loader2, Sparkles } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { getCategoryStyle } from "@/lib/category-style";
+import {
+  filterExtraSkills,
+  hideHiddenSkills,
+  mergeCategories,
+} from "@/lib/extra-skills";
 import type { SkillsListResponse } from "@/types/api";
 
 function SkillsPageInner() {
@@ -41,8 +46,11 @@ function SkillsPageInner() {
       });
   }, [q, category]);
 
-  const skills = data?.skills ?? [];
-  const allCategories = data?.categories ?? [];
+  const skills = hideHiddenSkills([
+    ...(data?.skills ?? []),
+    ...filterExtraSkills({ q, category }),
+  ]);
+  const allCategories = mergeCategories(data?.categories ?? []);
 
   return (
     <div className="container mx-auto px-4 py-8">

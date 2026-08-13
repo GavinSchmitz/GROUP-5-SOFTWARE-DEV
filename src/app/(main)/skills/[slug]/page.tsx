@@ -24,6 +24,10 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, MapPin, Loader2, Plus } from "lucide-react";
 import { api } from "@/lib/api-client";
+import {
+  extraSkillDetail,
+  findExtraSkillBySlug,
+} from "@/lib/extra-skills";
 import { useAuth } from "@/components/auth/use-auth";
 import { parseApiError } from "@/lib/errors";
 import type {
@@ -76,6 +80,14 @@ export default function SkillDetailPage() {
   } | null>(null);
 
   const load = useCallback(() => {
+    const extra = findExtraSkillBySlug(slug);
+    if (extra) {
+      return Promise.resolve().then(() => {
+        setError(null);
+        setSkill(extraSkillDetail(extra));
+        setLoading(false);
+      });
+    }
     return api
       .get<SkillsListResponse>("/skills", { params: { limit: 100 } })
       .then((list) => {
@@ -160,6 +172,8 @@ export default function SkillDetailPage() {
     );
   }
 
+  const isExtraSkill = findExtraSkillBySlug(skill.slug) !== undefined;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <Link
@@ -182,7 +196,7 @@ export default function SkillDetailPage() {
         )}
       </div>
 
-      {user ? (
+      {user && !isExtraSkill ? (
         panelOpen ? (
           <Card className="mb-8">
             <CardHeader>
@@ -286,14 +300,14 @@ export default function SkillDetailPage() {
             Add to My Profile
           </Button>
         )
-      ) : (
+      ) : !isExtraSkill ? (
         <Link
           href="/signin"
           className={`${buttonVariants({ variant: "outline" })} mb-8`}
         >
           Sign in to add this skill to your profile
         </Link>
-      )}
+      ) : null}
 
       <h2 className="mb-4 text-xl font-semibold">
         Providers ({skill.userSkills.length})
